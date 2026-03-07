@@ -3,10 +3,17 @@ import joblib
 import numpy as np
 import pandas as pd
 
+THRESHOLD=0.7
+prediction_count=0
 app = FastAPI()
 
 # Load trained model
 model = joblib.load("models/fraud_model.pkl")
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 
 @app.get("/")
@@ -16,6 +23,9 @@ def home():
 
 @app.post("/predict")
 def predict(transaction: dict):
+    
+    global prediction_count
+    prediction_count +=1
     # Convert input to DataFrame
     input_df = pd.DataFrame([transaction])
 
@@ -27,4 +37,20 @@ def predict(transaction: dict):
     return {
         "fraud_probability": float(probability),
         "prediction": prediction
+    }
+
+
+@app.get("/model-info")
+def model_info():
+    return {
+        "model_name": "RandomForest Fraud Detector",
+        "version": "1.0",
+        "threshold": THRESHOLD
+    }
+
+
+@app.get("/metrics")
+def metrics():
+    return {
+        "total_predictions": prediction_count
     }
