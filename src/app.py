@@ -2,13 +2,14 @@ from fastapi import FastAPI
 import joblib
 import numpy as np
 import pandas as pd
+import mlflow.pyfunc
 
 THRESHOLD=0.7
 prediction_count=0
 app = FastAPI()
 
-# Load trained model
-model = joblib.load("models/fraud_model.pkl")
+# Load trained model from MLflow Model Registry
+model = mlflow.pyfunc.load_model("models:/FraudDetectionModel@champion")
 
 
 @app.get("/health")
@@ -29,10 +30,13 @@ def predict(transaction: dict):
     # Convert input to DataFrame
     input_df = pd.DataFrame([transaction])
 
-    # Predict probability
-    probability = model.predict_proba(input_df)[0][1]
+    # Drop Time column if present — model was trained without it
+    input_df = input_df.drop(columns=["Time"], errors="ignore")
 
-    prediction = int(probability > 0.5)
+    # Predict probability using underlying sklearn model
+    probability = model._model_impl.sklearn_model.predict_proba(input_df)[0][1]
+
+    prediction = int(probability > THRESHOLD)
 
     return {
         "fraud_probability": float(probability),

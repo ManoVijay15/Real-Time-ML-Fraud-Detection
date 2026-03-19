@@ -15,6 +15,13 @@ from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from imblearn.over_sampling import SMOTE
 
+import numpy as np
+
+import mlflow
+import mlflow.sklearn
+
+from registry.mlflow_registry import register_model
+
 
 # -----------------------------------------
 # Load features from Feature Store
@@ -106,77 +113,178 @@ def train():
     print("\nAfter SMOTE balancing:")
     print(pd.Series(y_train_resampled).value_counts())
 
-    # -----------------------------------------
-    # Logistic Regression
-    # -----------------------------------------
-    print("\n===== Logistic Regression =====")
+    mlflow.set_experiment("FraudDetectionExperiment")
 
-    lr_model = LogisticRegression(max_iter=1000)
+    with mlflow.start_run():
 
-    lr_model.fit(X_train_resampled, y_train_resampled)
+        # -----------------------------------------
+        # Logistic Regression
+        # -----------------------------------------
+        print("\n===== Logistic Regression =====")
 
-    lr_pred = lr_model.predict(X_test)
-    lr_prob = lr_model.predict_proba(X_test)[:, 1]
+        lr_model = LogisticRegression(max_iter=1000)
 
-    print(classification_report(y_test, lr_pred))
-    print("ROC-AUC:", roc_auc_score(y_test, lr_prob))
-    print("PR-AUC:", average_precision_score(y_test, lr_prob))
+        lr_model.fit(X_train_resampled, y_train_resampled)
 
-    # -----------------------------------------
-    # Random Forest
-    # -----------------------------------------
-    print("\n===== Random Forest =====")
+        lr_pred = lr_model.predict(X_test)
+        lr_prob = lr_model.predict_proba(X_test)[:, 1]
 
-    rf_model = RandomForestClassifier(
-        n_estimators=300,
-        max_depth=15,
-        n_jobs=-1,
-        random_state=42
+        lr_roc_auc = roc_auc_score(y_test, lr_prob)
+        lr_pr_auc = average_precision_score(y_test, lr_prob)
+
+        print(classification_report(y_test, lr_pred))
+        print("ROC-AUC:", lr_roc_auc)
+        print("PR-AUC:", lr_pr_auc)
+
+        mlflow.log_metric("LogisticRegression_roc_auc", lr_roc_auc)
+        mlflow.log_metric("LogisticRegression_pr_auc", lr_pr_auc)
+
+        # -----------------------------------------
+        # Random Forest
+        # -----------------------------------------
+        print("\n===== Random Forest =====")
+
+        rf_model = RandomForestClassifier(
+            n_estimators=300,
+            max_depth=15,
+            n_jobs=-1,
+            random_state=42
+        )
+
+        rf_model.fit(X_train_resampled, y_train_resampled)
+
+        rf_pred = rf_model.predict(X_test)
+        rf_prob = rf_model.predict_proba(X_test)[:, 1]
+
+        rf_roc_auc = roc_auc_score(y_test, rf_prob)
+        rf_pr_auc = average_precision_score(y_test, rf_prob)
+
+        print(classification_report(y_test, rf_pred))
+        print("ROC-AUC:", rf_roc_auc)
+        print("PR-AUC:", rf_pr_auc)
+
+        mlflow.log_metric("RandomForest_roc_auc", rf_roc_auc)
+        mlflow.log_metric("RandomForest_pr_auc", rf_pr_auc)
+
+        # -----------------------------------------
+        # XGBoost
+        # -----------------------------------------
+        print("\n===== XGBoost =====")
+
+        xgb_model = XGBClassifier(
+            n_estimators=500,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            n_jobs=-1,
+            random_state=42
+        )
+
+        xgb_model.fit(X_train_resampled, y_train_resampled)
+
+        xgb_pred = xgb_model.predict(X_test)
+        xgb_prob = xgb_model.predict_proba(X_test)[:, 1]
+
+        xgb_roc_auc = roc_auc_score(y_test, xgb_prob)
+        xgb_pr_auc = average_precision_score(y_test, xgb_prob)
+
+        print(classification_report(y_test, xgb_pred))
+        print("ROC-AUC:", xgb_roc_auc)
+        print("PR-AUC:", xgb_pr_auc)
+
+        mlflow.log_metric("XGBoost_roc_auc", xgb_roc_auc)
+        mlflow.log_metric("XGBoost_pr_auc", xgb_pr_auc)
+
+        # log params
+        mlflow.log_param("lr_max_iter", 1000)
+        mlflow.log_param("rf_n_estimators", 300)
+        mlflow.log_param("rf_max_depth", 15)
+        mlflow.log_param("xgb_n_estimators", 500)
+        mlflow.log_param("xgb_max_depth", 6)
+        mlflow.log_param("xgb_learning_rate", 0.05)
+
+        # log best model artifact
+        mlflow.sklearn.log_model(xgb_model, "model")
+
+        run_id = mlflow.active_run().info.run_id
+
+        # -----------------------------------------
+        # Save model
+        # -----------------------------------------
+        print("\nSaving best model...")
+
+        os.makedirs("models", exist_ok=True)
+
+        joblib.dump(xgb_model, "models/fraud_model.pkl")
+
+        print("Model saved at models/fraud_model.pkl")
+
+    register_model(run_id)
+
+
+# -----------------------------------------
+# Train pipeline with MLflow experiment tracking
+# -----------------------------------------
+def train_pipeline(df):
+
+    X = df.drop("Class", axis=1)
+    y = df["Class"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
     )
 
-    rf_model.fit(X_train_resampled, y_train_resampled)
+    models = {
+        "LogisticRegression": LogisticRegression(max_iter=2000),
+        "RandomForest": RandomForestClassifier(n_estimators=100),
+        "XGBoost": XGBClassifier(
+            n_estimators=200,
+            max_depth=6,
+            learning_rate=0.1,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            eval_metric="logloss"
+        )
+    }
 
-    rf_pred = rf_model.predict(X_test)
-    rf_prob = rf_model.predict_proba(X_test)[:, 1]
+    best_model = None
+    best_score = 0
+    best_model_name = None
 
-    print(classification_report(y_test, rf_pred))
-    print("ROC-AUC:", roc_auc_score(y_test, rf_prob))
-    print("PR-AUC:", average_precision_score(y_test, rf_prob))
+    mlflow.set_experiment("FraudDetectionExperiment")
 
-    # -----------------------------------------
-    # XGBoost
-    # -----------------------------------------
-    print("\n===== XGBoost =====")
+    with mlflow.start_run() as run:
 
-    xgb_model = XGBClassifier(
-        n_estimators=500,
-        max_depth=6,
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        n_jobs=-1,
-        random_state=42
-    )
+        for name, model in models.items():
 
-    xgb_model.fit(X_train_resampled, y_train_resampled)
+            model.fit(X_train, y_train)
 
-    xgb_pred = xgb_model.predict(X_test)
-    xgb_prob = xgb_model.predict_proba(X_test)[:, 1]
+            preds = model.predict_proba(X_test)[:,1]
 
-    print(classification_report(y_test, xgb_pred))
-    print("ROC-AUC:", roc_auc_score(y_test, xgb_prob))
-    print("PR-AUC:", average_precision_score(y_test, xgb_prob))
+            roc_auc = roc_auc_score(y_test, preds)
+            pr_auc = average_precision_score(y_test, preds)
 
-    # -----------------------------------------
-    # Save model
-    # -----------------------------------------
-    print("\nSaving best model...")
+            print(f"{name} ROC-AUC:", roc_auc)
+            print(f"{name} PR-AUC:", pr_auc)
 
-    os.makedirs("models", exist_ok=True)
+            mlflow.log_metric(f"{name}_roc_auc", roc_auc)
+            mlflow.log_metric(f"{name}_pr_auc", pr_auc)
 
-    joblib.dump(xgb_model, "models/fraud_model.pkl")
+            if pr_auc > best_score:
+                best_score = pr_auc
+                best_model = model
+                best_model_name = name
 
-    print("Model saved at models/fraud_model.pkl")
+        print("\nBest Model:", best_model_name)
+
+        mlflow.log_param("best_model", best_model_name)
+
+        mlflow.sklearn.log_model(best_model, "model")
+
+        run_id = run.info.run_id
+
+    register_model(run_id)
 
 
 # -----------------------------------------

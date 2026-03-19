@@ -15,7 +15,7 @@ transaction_source = FileSource(
 fraud_features = FeatureView(
     name="fraud_features",
     entities=[transaction],
-    ttl=timedelta(days=1),
+    ttl=timedelta(days=3650),
     schema=[
 
         Field(name="Time", dtype=Float32),
