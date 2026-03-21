@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 import joblib
 import numpy as np
@@ -8,8 +9,16 @@ THRESHOLD=0.7
 prediction_count=0
 app = FastAPI()
 
-# Load trained model from MLflow Model Registry
-model = mlflow.pyfunc.load_model("models:/FraudDetectionModel@champion")
+# Load trained model — use MODEL_PATH env var if set, otherwise fall back to registry
+_model_path = os.getenv(
+    "MODEL_PATH",
+    "models:/FraudDetectionModel@champion"
+)
+_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+if _tracking_uri:
+    mlflow.set_tracking_uri(_tracking_uri)
+
+model = mlflow.pyfunc.load_model(_model_path)
 
 
 @app.get("/health")
