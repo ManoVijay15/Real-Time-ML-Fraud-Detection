@@ -12,3 +12,6 @@ id_ed25519
 id_ed25519.pub
 *.pem
 data/raw/
+fraud_feature_store/feature_repo/data/processed/
+fraud_feature_store/feature_repo/data/online_store.db
+fraud_feature_store/feature_repo/data/registry.db
