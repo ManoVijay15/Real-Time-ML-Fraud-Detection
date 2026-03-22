@@ -41,6 +41,11 @@ def predict(transaction: dict):
 
     # Drop Time column if present — model was trained without it
     input_df = input_df.drop(columns=["Time"], errors="ignore")
+    input_df = input_df.astype(float)
+
+    # Reorder columns to match training order
+    feature_order = [f"V{i}" for i in range(1, 29)] + ["Amount"]
+    input_df = input_df[feature_order]
 
     # Predict probability using underlying sklearn model
     probability = model._model_impl.sklearn_model.predict_proba(input_df)[0][1]

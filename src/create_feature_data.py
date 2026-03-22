@@ -7,7 +7,7 @@ df = pd.read_csv("/Users/mk004/Documents/GH/creditcard.csv")
 df["transaction_id"] = range(len(df))
 
 # Create timestamp column required by Feast
-df["event_timestamp"] = pd.Timestamp.now()
+df["event_timestamp"] = pd.Timestamp("2024-01-01", tz="UTC")
 
 # Save parquet for feature store
 output_path = "fraud_feature_store/feature_repo/data/processed/transactions.parquet"
