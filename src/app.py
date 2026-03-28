@@ -9,6 +9,16 @@ THRESHOLD=0.7
 prediction_count=0
 app = FastAPI()
 
+CURRENT_DATA_PATH = "monitoring/current_data.csv"
+FEATURE_ORDER = [f"V{i}" for i in range(1, 29)] + ["Amount"]
+
+
+def save_prediction_input(data: dict):
+    os.makedirs("monitoring", exist_ok=True)
+    df = pd.DataFrame([data])
+    write_header = not os.path.exists(CURRENT_DATA_PATH)
+    df.to_csv(CURRENT_DATA_PATH, mode="a", header=write_header, index=False)
+
 # Load trained model — use MODEL_PATH env var if set, otherwise fall back to registry
 _model_path = os.getenv(
     "MODEL_PATH",
@@ -44,8 +54,10 @@ def predict(transaction: dict):
     input_df = input_df.astype(float)
 
     # Reorder columns to match training order
-    feature_order = [f"V{i}" for i in range(1, 29)] + ["Amount"]
-    input_df = input_df[feature_order]
+    input_df = input_df[FEATURE_ORDER]
+
+    # Log input for drift monitoring
+    save_prediction_input(input_df.iloc[0].to_dict())
 
     # Predict probability using underlying sklearn model
     probability = model._model_impl.sklearn_model.predict_proba(input_df)[0][1]

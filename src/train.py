@@ -97,6 +97,13 @@ def train():
         stratify=y
     )
 
+    # Save reference dataset for drift detection baseline
+    os.makedirs("monitoring", exist_ok=True)
+    reference_data = X_train.copy()
+    reference_data["target"] = y_train.values
+    reference_data.to_csv("monitoring/reference_data.csv", index=False)
+    print("Reference dataset saved to monitoring/reference_data.csv")
+
     print("\nOriginal class distribution:")
     print(y_train.value_counts())
 
