@@ -84,9 +84,11 @@ def train():
     X = df.drop(columns=["Class", "transaction_id"])
     y = df["Class"]
 
-    # Scale Amount column
+    # Scale Amount column and persist scaler for inference
     scaler = StandardScaler()
     X["Amount"] = scaler.fit_transform(X[["Amount"]])
+    os.makedirs("models", exist_ok=True)
+    joblib.dump(scaler, "models/scaler.pkl")
 
     # Train test split
     X_train, X_test, y_train, y_test = train_test_split(
